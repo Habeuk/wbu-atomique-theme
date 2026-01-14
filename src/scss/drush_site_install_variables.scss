@@ -1,0 +1,42 @@
+
+    /**
+     * On definie les variables à ce niveau afin que les variables qui derive de ces valeurs soit ajusté.
+     * Example : $wbu-h1-font-size est definie ici, les derivées $wbu-h1-font-size-md, $wbu-h1-font-size-sm vont etre
+     * egalement surcharger.
+     */
+
+    //color
+    $wbu-color-primary: #FF5400;
+    $wbu-color-secondary: #0060BF;
+    $wbu-color-thirdly: #011B36;
+    $wbu-background: #002B57;
+    $wbu-link-color: $wbu-color-secondary;
+    $wbu-bootstrap-primary: $wbu-color-secondary;
+
+    // Police
+    $wbu-h1-font-size: 5.6rem;
+    $wbu-h2-font-size: 4.4rem;
+    $wbu-h3-font-size: 3.2rem;
+    $wbu-h4-font-size: 2rem;
+    $wbu-h5-font-size: 1.7rem;
+    $wbu-h6-font-size: 1.4rem;
+    $wbu-default-font-size: 1.8rem;
+    
+    // On a besoin de ce fichier pour les styles ajoutés dans ./custom.scss.
+    // @use "@stephane888/wbu-atomique/scss/wbu-ressources-clean.scss" as *;
+    
+$wbu-titre-suppra: 8.8rem;
+$wbu-titre-biggest: 8rem;
+
+    /**
+     * On injecte toutes les variables directement dans ce fichier.
+     */
+    @import "@stephane888/wbu-atomique/scss/_variables.scss";
+    @import "@stephane888/wbu-atomique/scss/wbu-ressources-clean.scss";
+
+    // Les variables qui ont besoins des informations provenant du core de
+    // wbu-atomique.
+    $space_bottom: $wbu-margin * 5;
+    $space_top: $wbu-margin * 4;
+    $space_inner_top: $space_top * 0.5;
+    $space_inner_top: $space_top * 0.5;
