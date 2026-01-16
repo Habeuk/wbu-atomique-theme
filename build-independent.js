@@ -22,6 +22,7 @@ if (!fs.existsSync(entriesPath)) {
 const allEntries = JSON.parse(fs.readFileSync(entriesPath, "utf-8"));
 
 const entryNames = Object.keys(allEntries);
+const destDir = "/siteweb/JavaApp/propiej/src/main/resources/static"
 console.log(`📊 ${entryNames.length} entrées détectées`);
 
 // ------------------------------------------------------
@@ -45,7 +46,7 @@ function createMinimalWebpackConfig(entryName, entryPath) {
 
       output: {
         path: '${path.resolve(__dirname, "../")}',
-        filename: './js/[name].js',
+        filename: '${destDir}/js/[name].js',
       },
 
       devtool: devMode ? "inline-source-map" : false,
@@ -121,7 +122,7 @@ function createMinimalWebpackConfig(entryName, entryPath) {
 
       plugins: [
         new MiniCssExtractPlugin({
-          filename: "./css/[name].css"
+          filename: "${destDir}/css/[name].css"
         })
       ],
 
@@ -152,7 +153,6 @@ function buildSingleEntry(entryName, entryPath, index, total) {
     const configPath = path.join(__dirname, `.temp-config-${tempId}.js`);
 
     fs.writeFileSync(configPath, configContent, "utf8");
-
     const childMemory = Math.floor(CONFIG.maxMemoryMB * 0.8);
     const webpackProcess = spawn(
       "node",
