@@ -22,7 +22,6 @@ if (!fs.existsSync(entriesPath)) {
 const allEntries = JSON.parse(fs.readFileSync(entriesPath, "utf-8"));
 
 const entryNames = Object.keys(allEntries);
-const destDir = "/siteweb/JavaApp/propiej/src/main/resources/static"
 console.log(`📊 ${entryNames.length} entrées détectées`);
 
 // ------------------------------------------------------
@@ -46,13 +45,13 @@ function createMinimalWebpackConfig(entryName, entryPath) {
 
       output: {
         path: '${path.resolve(__dirname, "../")}',
-        filename: '${destDir}/js/[name].js',
+        filename: './js/[name].js',
       },
 
       devtool: devMode ? "inline-source-map" : false,
 
       cache: {
-        type: "filesystem",
+        type: "memory",
       },
 
       module: {
@@ -122,7 +121,7 @@ function createMinimalWebpackConfig(entryName, entryPath) {
 
       plugins: [
         new MiniCssExtractPlugin({
-          filename: "${destDir}/css/[name].css"
+          filename: "./css/[name].css"
         })
       ],
 
@@ -140,7 +139,6 @@ function createMinimalWebpackConfig(entryName, entryPath) {
   `;
 }
 
-
 // ------------------------------------------------------
 // 2. Build d'une entrée
 // ------------------------------------------------------
@@ -153,6 +151,7 @@ function buildSingleEntry(entryName, entryPath, index, total) {
     const configPath = path.join(__dirname, `.temp-config-${tempId}.js`);
 
     fs.writeFileSync(configPath, configContent, "utf8");
+
     const childMemory = Math.floor(CONFIG.maxMemoryMB * 0.8);
     const webpackProcess = spawn(
       "node",

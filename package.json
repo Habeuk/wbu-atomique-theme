@@ -51,6 +51,6 @@
     "not ie 11"
   ],
   "dependencies": {
-    "@stephane888/wbu-atomique": "file:../../AppVuejs/wbu-atomique"
+    "@stephane888/wbu-atomique": "file:../wbu-atomique"
   }
 }

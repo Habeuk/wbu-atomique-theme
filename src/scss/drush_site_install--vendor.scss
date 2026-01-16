@@ -1,37 +1,18 @@
-@use "./drush_site_install_variables.scss" as *;@use "@stephane888/wbu-atomique/scss/bootstrap-all.scss";
+@use "./drush_site_install_variables.scss" as *;
+@use "@stephane888/wbu-atomique/scss/bootstrap-all.scss";
 @use "@stephane888/wbu-atomique/scss/atome/typography/_default.scss";
 @use "@stephane888/wbu-atomique/scss/molecule/default-class.scss";
-@use "@stephane888/wbu-atomique/scss/drupal/ajustement.scss"
-;$wbu-color-text: #54454c;
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap');
-.h1, .h2, .h3, h1, h2, h3, .wbu-titre-biggest, .wbu-titre-suppra {
+@use "@stephane888/wbu-atomique/scss/drupal/ajustement.scss";
+@import url("https://fonts.googleapis.com/css2?family=Oswald:wght@200..700&display=swap");
+.h1,
+.h2,
+.h3,
+h1,
+h2,
+h3,
+.wbu-titre-biggest,
+.wbu-titre-suppra {
   font-family: "Oswald", sans-serif;
   font-optical-sizing: auto;
-  font-weight:normal;
+  font-weight: normal;
 }
-.h1, .wbu-titre-biggest, .wbu-titre-suppra{
-  font-weight:bold;
-}
-@import url('https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,200..900;1,200..900&display=swap');
-body {
-  font-family:"Source sans 3", "Ubuntu", sans-serif;
-  //font-family: 'Titillium Web', sans-serif;
-  color: $wbu-color-text;
-  line-height: 1.4;
-  .container {
-    max-width: 1200px;
-    width: 100%;
-  }
-  .border-dashed{
-    border-style: dashed;
-  }
-  .article-custom-bg {
-      background-position: unset !important;
-      background-size: contain !important;  
-      &::before {
-        opacity: 0.8 !important;
-      }
-    }
-}
-

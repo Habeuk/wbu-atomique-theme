@@ -27,14 +27,10 @@ function runBuild(entryList) {
 
   console.log(`\n⚙️  Build déclenché : ${entryList}`);
 
-  const build = spawn(
-    "node",
-    ["build-independent.js", "--custom", entryList],
-    {
-      stdio: "inherit",
-      shell: true,
-    }
-  );
+  const build = spawn("node", ["build-independent.js", "--custom", entryList], {
+    stdio: "inherit",
+    shell: true,
+  });
 
   build.on("close", (code) => {
     isBuilding = false;
@@ -61,26 +57,21 @@ function startWatcher() {
   const entries = JSON.parse(
     fs.readFileSync(path.resolve(__dirname, "auto_generate_entries.json"))
   );
-
   const fileToEntries = {};
   Object.entries(entries).forEach(([entryName, entryPath]) => {
     fileToEntries[path.resolve(entryPath)] = [entryName];
   });
-
   const baseList = ["global-style", "vendor-style", "mail-style"].join(",");
-
   const watcher = chokidar.watch("./src", {
     ignored: /node_modules/,
     ignoreInitial: true,
     persistent: true,
   });
-
   watcher.on("change", (filePath) => {
     clearTimeout(debounceTimer);
-
     debounceTimer = setTimeout(() => {
       const abs = path.resolve(filePath);
-
+      console.log("\n🔍 Fichier modifié :", abs);
       if (fileToEntries[abs]) {
         // Reconstruction ciblée
         const list = fileToEntries[abs].join(",");
@@ -91,7 +82,6 @@ function startWatcher() {
       }
     }, 200); // DEBOUNCE = 200ms
   });
-
   console.log("👁️  Watcher prêt.");
 }
 
