@@ -12,8 +12,16 @@ const CONFIG = {
   nodeOptions: `--max-old-space-size=${Math.floor(2048 * 0.8)}`, // Réserver 20% pour le parent
 };
 
+// Charger les configurations
+const configs = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "configs.json"))
+);
+
+const outDir = configs.outDir;
+const inDir = configs.inDir ?? __dirname;
+
 // Charger les entrées
-const entriesPath = path.resolve(__dirname, "auto_generate_entries.json");
+const entriesPath = path.resolve(inDir, "auto_generate_entries.json");
 if (!fs.existsSync(entriesPath)) {
   console.error("❌ Fichier auto_generate_entries.json introuvable");
   process.exit(1);
@@ -40,11 +48,11 @@ function createMinimalWebpackConfig(entryName, entryPath) {
       mode: devMode ? "development" : "production",
 
       entry: {
-        '${entryName}': '${path.resolve(__dirname, entryPath)}'
+        '${entryName}': '${path.resolve(inDir, entryPath)}'
       },
 
       output: {
-        path: '${path.resolve(__dirname, "../")}',
+        path: '${path.resolve(outDir)}',
         filename: './js/[name].js',
       },
 
@@ -148,7 +156,7 @@ function buildSingleEntry(entryName, entryPath, index, total) {
 
     const configContent = createMinimalWebpackConfig(entryName, entryPath);
     const tempId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const configPath = path.join(__dirname, `.temp-config-${tempId}.js`);
+    const configPath = path.join(inDir, `.temp-config-${tempId}.js`);
 
     fs.writeFileSync(configPath, configContent, "utf8");
 
