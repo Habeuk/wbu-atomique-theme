@@ -13,12 +13,10 @@ const CONFIG = {
 };
 
 // Charger les configurations
-const configs = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, "configs.json"))
-);
+const configs = JSON.parse(fs.readFileSync(path.resolve(__dirname, "configs.json")));
 
 const outDir = configs.outDir;
-const inDir = configs.inDir ?? __dirname;
+const inDir = __dirname;
 
 // Charger les entrées
 const entriesPath = path.resolve(inDir, "auto_generate_entries.json");
@@ -161,24 +159,14 @@ function buildSingleEntry(entryName, entryPath, index, total) {
     fs.writeFileSync(configPath, configContent, "utf8");
 
     const childMemory = Math.floor(CONFIG.maxMemoryMB * 0.8);
-    const webpackProcess = spawn(
-      "node",
-      [
-        `--max-old-space-size=${childMemory}`,
-        require.resolve("webpack/bin/webpack.js"),
-        "--config",
-        configPath,
-        "--color",
-      ],
-      {
-        stdio: ["pipe", "pipe", "pipe"],
-        shell: false,
-        env: {
-          ...process.env,
-          NODE_OPTIONS: `--max-old-space-size=${childMemory}`,
-        },
-      }
-    );
+    const webpackProcess = spawn("node", [`--max-old-space-size=${childMemory}`, require.resolve("webpack/bin/webpack.js"), "--config", configPath, "--color"], {
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: false,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: `--max-old-space-size=${childMemory}`,
+      },
+    });
 
     let errorOutput = "";
     let stdOutput = "";
@@ -198,25 +186,18 @@ function buildSingleEntry(entryName, entryPath, index, total) {
           fs.unlinkSync(configPath);
         }
       } catch (cleanupError) {
-        console.warn(
-          `⚠️ Impossible de supprimer ${configPath}: ${cleanupError.message}`
-        );
+        console.warn(`⚠️ Impossible de supprimer ${configPath}: ${cleanupError.message}`);
       }
 
       if (code === 0) {
         console.log(`   ✅ ${entryName} terminé`);
         resolve({ entryName, success: true });
       } else {
-        const errorPreview =
-          errorOutput.length > 0
-            ? errorOutput.substring(0, 500)
-            : stdOutput.substring(0, 500);
+        const errorPreview = errorOutput.length > 0 ? errorOutput.substring(0, 500) : stdOutput.substring(0, 500);
         console.log(`   ❌ ${entryName} échoué (code: ${code})`);
         console.log(`      ${errorPreview.replace(/\n/g, "\n      ")}`);
         if (errorOutput.length > 500) {
-          console.log(
-            `      ... (${errorOutput.length - 500} caractères supplémentaires)`
-          );
+          console.log(`      ... (${errorOutput.length - 500} caractères supplémentaires)`);
         }
         resolve({
           entryName,
@@ -263,9 +244,7 @@ class QueueManager {
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
       const chunk = chunks[chunkIndex];
 
-      console.log(
-        `\n📦 Lot ${chunkIndex + 1}/${chunks.length} (${chunk.length} entrées)`
-      );
+      console.log(`\n📦 Lot ${chunkIndex + 1}/${chunks.length} (${chunk.length} entrées)`);
 
       await this.processChunk(chunk);
 
@@ -296,12 +275,7 @@ class QueueManager {
 
       this.running++;
 
-      const promise = buildSingleEntry(
-        entry.name,
-        entry.path,
-        globalIndex,
-        this.total
-      )
+      const promise = buildSingleEntry(entry.name, entry.path, globalIndex, this.total)
         .then((result) => {
           this.running--;
           this.completed++;
@@ -350,9 +324,7 @@ async function main() {
   const cpuCount = Math.max(1, os.cpus().length - 1); // Laisser un CPU libre
   const maxConcurrent = Math.min(cpuCount, CONFIG.maxConcurrent);
 
-  console.log(
-    `💻 CPUs disponibles: ${os.cpus().length} (utilisés: ${maxConcurrent})`
-  );
+  console.log(`💻 CPUs disponibles: ${os.cpus().length} (utilisés: ${maxConcurrent})`);
 
   const queue = new QueueManager(entriesArray, maxConcurrent);
   const startTime = Date.now();
@@ -371,9 +343,7 @@ async function main() {
   if (result.failed > 0) {
     console.log("\n📋 Détail des échecs :");
     result.failedEntries.forEach((fail, idx) => {
-      console.log(
-        `  ${idx + 1}. ${fail.entryName}: ${fail.error?.substring(0, 100)}...`
-      );
+      console.log(`  ${idx + 1}. ${fail.entryName}: ${fail.error?.substring(0, 100)}...`);
     });
     process.exit(1);
   }
@@ -385,10 +355,7 @@ async function main() {
 // 5. buildCustom() pour dev-optimized.js
 // ------------------------------------------------------
 async function buildCustom(customEntries) {
-  console.log(
-    "\n🎯 Build personnalisé pour:",
-    Object.keys(customEntries).join(", ")
-  );
+  console.log("\n🎯 Build personnalisé pour:", Object.keys(customEntries).join(", "));
 
   const entries = Object.entries(customEntries).map(([name, path]) => ({
     name,

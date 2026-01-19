@@ -1,8 +1,9 @@
 .DS_Store
 node_modules
 package-lock.json
+auto_generate_entries.json
 /dist
-
+/src
 
 # local env files
 .env.local
