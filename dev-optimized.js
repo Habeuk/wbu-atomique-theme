@@ -54,12 +54,7 @@ function runBuild(entryList) {
 // 3. Démarrer le watcher
 // ===========================
 function startWatcher() {
-  const configs = JSON.parse(
-    fs.read.readFileSync(path.resolve(__dirname, "config.json"))
-  );
-  const entries = JSON.parse(
-    fs.readFileSync(path.resolve(__dirname, "auto_generate_entries.json"))
-  );
+  const entries = JSON.parse(fs.readFileSync(path.resolve(__dirname, "auto_generate_entries.json")));
   const fileToEntries = {};
   Object.entries(entries).forEach(([entryName, entryPath]) => {
     fileToEntries[path.resolve(entryPath)] = [entryName];
