@@ -1,2 +1,2 @@
-import "../scss/drush_site_install.scss";
+import "../scss/style.scss";
 import "./custom.js";
