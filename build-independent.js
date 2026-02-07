@@ -7,33 +7,34 @@ const os = require("os");
 // Configuration
 const CONFIG = {
   maxMemoryMB: 2048,
-  batchSize: 50,
-  maxConcurrent: 5,
-  nodeOptions: `--max-old-space-size=${Math.floor(2048 * 0.8)}`, // Réserver 20% pour le parent
+  batchSize: 10, // Réduit pour mieux gérer la mémoire
+  maxConcurrent: 3, // Réduit pour limiter la consommation mémoire totale
+  nodeOptions: `--max-old-space-size=${Math.floor(2048 * 0.8)}`,
 };
 
-// Charger les configurations
-const configs = JSON.parse(fs.readFileSync(path.resolve(__dirname, "configs.json")));
-
-const outDir = configs.outDir;
-const inDir = __dirname;
-
 // Charger les entrées
-const entriesPath = path.resolve(inDir, "auto_generate_entries.json");
+const entriesPath = path.resolve(__dirname, "auto_generate_entries.json");
 if (!fs.existsSync(entriesPath)) {
   console.error("❌ Fichier auto_generate_entries.json introuvable");
   process.exit(1);
 }
 
 const allEntries = JSON.parse(fs.readFileSync(entriesPath, "utf-8"));
-
 const entryNames = Object.keys(allEntries);
 console.log(`📊 ${entryNames.length} entrées détectées`);
 
 // ------------------------------------------------------
-// 1. Génération Config Webpack
+// 1. Génération Config Webpack - MULTI-ENTRÉES
 // ------------------------------------------------------
-function createMinimalWebpackConfig(entryName, entryPath) {
+function createMultiEntryWebpackConfig(entriesObject) {
+  // entriesObject: { [entryName]: entryPath, ... }
+  const entryStrings = Object.entries(entriesObject)
+    .map(
+      ([name, entryPath]) =>
+        `'${name}': '${path.resolve(__dirname, entryPath)}'`,
+    )
+    .join(",\n        ");
+
   return `
     const MiniCssExtractPlugin = require('mini-css-extract-plugin');
     const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
@@ -46,11 +47,11 @@ function createMinimalWebpackConfig(entryName, entryPath) {
       mode: devMode ? "development" : "production",
 
       entry: {
-        '${entryName}': '${path.resolve(inDir, entryPath)}'
+        ${entryStrings}
       },
 
       output: {
-        path: '${path.resolve(outDir)}',
+        path: '${path.resolve(__dirname, "../")}',
         filename: './js/[name].js',
       },
 
@@ -132,47 +133,100 @@ function createMinimalWebpackConfig(entryName, entryPath) {
       ],
 
       optimization: {
-        minimize: !devMode, // Seulement en production
+        minimize: !devMode,
         minimizer: [
           new CssMinimizerPlugin(),
           new TerserPlugin()
         ],
+        splitChunks: {
+          cacheGroups: {
+            vendor: {
+              test: /[\\\\/]node_modules[\\\\/]/,
+              name: 'vendors',
+              chunks: 'all',
+              minChunks: 2,
+            },
+            styles: {
+              test: /\\.css$/,
+              name: 'styles',
+              chunks: 'all',
+              enforce: true,
+            },
+          },
+        },
       },
 
-      performance: { hints: false },
-      stats: 'errors-only'
+      performance: { 
+        hints: false,
+        maxEntrypointSize: 512000,
+        maxAssetSize: 512000
+      },
+      
+      stats: {
+        colors: true,
+        modules: false,
+        children: false,
+        chunks: false,
+        chunkModules: false,
+        entrypoints: false
+      }
     };
   `;
 }
 
 // ------------------------------------------------------
-// 2. Build d'une entrée
+// 2. Build d'un LOT d'entrées
 // ------------------------------------------------------
-function buildSingleEntry(entryName, entryPath, index, total) {
+function buildEntryChunk(chunkEntries, chunkIndex, totalChunks, totalEntries) {
   return new Promise((resolve) => {
-    console.log(`[${index + 1}/${total}] 🔨 ${entryName}`);
+    const entryNames = Object.keys(chunkEntries);
+    console.log(
+      `[Lot ${chunkIndex + 1}/${totalChunks}] 🔨 ${entryNames.length} entrées: ${entryNames.join(", ")}`,
+    );
 
-    const configContent = createMinimalWebpackConfig(entryName, entryPath);
+    const configContent = createMultiEntryWebpackConfig(chunkEntries);
     const tempId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const configPath = path.join(inDir, `.temp-config-${tempId}.js`);
+    const configPath = path.join(__dirname, `.temp-config-${tempId}.js`);
 
     fs.writeFileSync(configPath, configContent, "utf8");
 
-    const childMemory = Math.floor(CONFIG.maxMemoryMB * 0.8);
-    const webpackProcess = spawn("node", [`--max-old-space-size=${childMemory}`, require.resolve("webpack/bin/webpack.js"), "--config", configPath, "--color"], {
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: false,
-      env: {
-        ...process.env,
-        NODE_OPTIONS: `--max-old-space-size=${childMemory}`,
+    // Calcul mémoire adaptative selon la taille du lot
+    const chunkMemory = Math.min(
+      CONFIG.maxMemoryMB,
+      Math.floor(CONFIG.maxMemoryMB * 0.6 + entryNames.length * 50), // Base + 50MB par entrée
+    );
+
+    const webpackProcess = spawn(
+      "node",
+      [
+        `--max-old-space-size=${chunkMemory}`,
+        require.resolve("webpack/bin/webpack.js"),
+        "--config",
+        configPath,
+        "--color",
+      ],
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: false,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: `--max-old-space-size=${chunkMemory}`,
+        },
       },
-    });
+    );
 
     let errorOutput = "";
     let stdOutput = "";
+    let progressData = "";
 
     webpackProcess.stdout.on("data", (data) => {
-      stdOutput += data.toString();
+      const output = data.toString();
+      stdOutput += output;
+
+      // Afficher la progression Webpack
+      if (output.includes("%")) {
+        process.stdout.write(`\r${output.trim()}`);
+      }
     });
 
     webpackProcess.stderr.on("data", (data) => {
@@ -186,33 +240,62 @@ function buildSingleEntry(entryName, entryPath, index, total) {
           fs.unlinkSync(configPath);
         }
       } catch (cleanupError) {
-        console.warn(`⚠️ Impossible de supprimer ${configPath}: ${cleanupError.message}`);
+        console.warn(
+          `⚠️ Impossible de supprimer ${configPath}: ${cleanupError.message}`,
+        );
       }
 
       if (code === 0) {
-        console.log(`   ✅ ${entryName} terminé`);
-        resolve({ entryName, success: true });
-      } else {
-        const errorPreview = errorOutput.length > 0 ? errorOutput.substring(0, 500) : stdOutput.substring(0, 500);
-        console.log(`   ❌ ${entryName} échoué (code: ${code})`);
-        console.log(`      ${errorPreview.replace(/\n/g, "\n      ")}`);
-        if (errorOutput.length > 500) {
-          console.log(`      ... (${errorOutput.length - 500} caractères supplémentaires)`);
-        }
+        console.log(
+          `\n   ✅ Lot ${chunkIndex + 1} terminé (${entryNames.length} entrées)`,
+        );
         resolve({
-          entryName,
+          success: true,
+          entries: entryNames,
+          chunkIndex,
+        });
+      } else {
+        console.log(`\n   ❌ Lot ${chunkIndex + 1} échoué`);
+
+        // Essayer d'extraire les erreurs spécifiques
+        const errorLines = errorOutput.split("\n");
+        const entryErrors = {};
+
+        entryNames.forEach((entryName) => {
+          const entryError = errorLines.find(
+            (line) =>
+              line.includes(entryName) &&
+              (line.includes("Error") ||
+                line.includes("error") ||
+                line.includes("Failed")),
+          );
+          if (entryError) {
+            entryErrors[entryName] = entryError.substring(0, 200);
+          }
+        });
+
+        resolve({
           success: false,
-          error: errorOutput || stdOutput,
+          entries: entryNames,
+          chunkIndex,
+          error:
+            errorOutput.length > 0
+              ? errorOutput.substring(0, 1000)
+              : stdOutput.substring(0, 1000),
+          entryErrors: Object.keys(entryErrors).length > 0 ? entryErrors : null,
           exitCode: code,
         });
       }
     });
 
     webpackProcess.on("error", (err) => {
-      console.log(`   ❌ ${entryName} - erreur de lancement: ${err.message}`);
+      console.log(
+        `   ❌ Lot ${chunkIndex + 1} - erreur de lancement: ${err.message}`,
+      );
       resolve({
-        entryName,
         success: false,
+        entries: entryNames,
+        chunkIndex,
         error: err.message,
       });
     });
@@ -220,161 +303,251 @@ function buildSingleEntry(entryName, entryPath, index, total) {
 }
 
 // ------------------------------------------------------
-// 3. Gestionnaire de file d'attente
+// 3. Gestionnaire de file d'attente optimisé
 // ------------------------------------------------------
-class QueueManager {
-  constructor(entries, maxConcurrent) {
-    this.entries = entries;
+class OptimizedQueueManager {
+  constructor(entries, maxConcurrent, batchSize) {
+    this.allEntries = entries;
     this.maxConcurrent = maxConcurrent;
+    this.batchSize = batchSize;
     this.running = 0;
-    this.completed = 0;
-    this.succeeded = 0;
-    this.failed = [];
-    this.total = entries.length;
+    this.completedChunks = 0;
+    this.succeededEntries = 0;
+    this.failedEntries = [];
+    this.totalEntries = entries.length;
+
+    // Créer les chunks
+    this.chunks = this.createChunks();
+    this.totalChunks = this.chunks.length;
+  }
+
+  // Créer des chunks intelligents (regrouper par similarité de chemin)
+  createChunks() {
+    const chunks = [];
+    const entriesArray = Object.entries(this.allEntries);
+
+    // Trier les entrées par chemin pour regrouper les fichiers similaires
+    entriesArray.sort((a, b) => a[1].localeCompare(b[1]));
+
+    for (let i = 0; i < entriesArray.length; i += this.batchSize) {
+      const chunkSlice = entriesArray.slice(i, i + this.batchSize);
+      const chunkObject = {};
+      chunkSlice.forEach(([name, path]) => {
+        chunkObject[name] = path;
+      });
+      chunks.push(chunkObject);
+    }
+
+    console.log(
+      `📦 Création de ${chunks.length} lots (max ${this.batchSize} entrées par lot)`,
+    );
+    return chunks;
   }
 
   async run() {
     console.log(`🚀 Démarrage avec ${this.maxConcurrent} processus parallèles`);
+    console.log(
+      `📊 Total: ${this.totalEntries} entrées en ${this.totalChunks} lots`,
+    );
 
-    const chunks = [];
-    for (let i = 0; i < this.entries.length; i += CONFIG.batchSize) {
-      chunks.push(this.entries.slice(i, i + CONFIG.batchSize));
-    }
+    const results = [];
 
-    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-      const chunk = chunks[chunkIndex];
+    // Traiter les chunks avec limite de concurrence
+    for (let i = 0; i < this.chunks.length; i += this.maxConcurrent) {
+      const chunkBatch = this.chunks.slice(i, i + this.maxConcurrent);
 
-      console.log(`\n📦 Lot ${chunkIndex + 1}/${chunks.length} (${chunk.length} entrées)`);
+      console.log(
+        `\n⚡ Lot ${i + 1}-${Math.min(i + this.maxConcurrent, this.chunks.length)}/${this.chunks.length}`,
+      );
 
-      await this.processChunk(chunk);
+      const batchPromises = chunkBatch.map((chunk, batchIndex) => {
+        const chunkIndex = i + batchIndex;
+        return this.processChunk(chunk, chunkIndex);
+      });
 
-      if (chunkIndex < chunks.length - 1) {
-        console.log("⏸️  Pause entre les lots…");
-        await new Promise((res) => setTimeout(res, 1000));
+      const batchResults = await Promise.allSettled(batchPromises);
+      results.push(...batchResults);
+
+      // Pause entre les batches pour éviter la surcharge
+      if (i + this.maxConcurrent < this.chunks.length) {
+        console.log("⏸️  Pause entre les batches...");
+        await new Promise((res) => setTimeout(res, 2000));
       }
     }
 
-    return {
-      total: this.total,
-      succeeded: this.succeeded,
-      failed: this.failed.length,
-      failedEntries: this.failed,
-    };
+    // Compiler les résultats
+    return this.compileResults(results);
   }
 
-  async processChunk(chunk) {
-    const promises = [];
-
-    for (const [chunkIndex, entry] of chunk.entries()) {
-      const globalIndex = this.completed + chunkIndex;
-
-      // Attendre qu'un slot se libère
-      while (this.running >= this.maxConcurrent) {
-        await new Promise((res) => setTimeout(res, 100));
-      }
-
-      this.running++;
-
-      const promise = buildSingleEntry(entry.name, entry.path, globalIndex, this.total)
-        .then((result) => {
-          this.running--;
-          this.completed++;
-
-          if (result.success) {
-            this.succeeded++;
-          } else {
-            this.failed.push(result);
-          }
-
-          return result;
-        })
-        .catch((error) => {
-          this.running--;
-          this.completed++;
-          const failedResult = {
-            entryName: entry.name,
-            success: false,
-            error: error.message,
-          };
-          this.failed.push(failedResult);
-          return failedResult;
-        });
-
-      promises.push(promise);
-
-      // Petit délai entre le lancement des processus
+  async processChunk(chunk, chunkIndex) {
+    // Attendre qu'un slot se libère
+    while (this.running >= this.maxConcurrent) {
       await new Promise((res) => setTimeout(res, 100));
     }
 
-    await Promise.allSettled(promises);
+    this.running++;
+
+    try {
+      const result = await buildEntryChunk(
+        chunk,
+        chunkIndex,
+        this.totalChunks,
+        this.totalEntries,
+      );
+
+      this.running--;
+      this.completedChunks++;
+
+      // Mettre à jour les statistiques
+      const entryCount = Object.keys(chunk).length;
+      if (result.success) {
+        this.succeededEntries += entryCount;
+      } else {
+        Object.keys(chunk).forEach((entryName) => {
+          this.failedEntries.push({
+            entryName,
+            error: result.entryErrors?.[entryName] || result.error,
+            chunkIndex,
+          });
+        });
+      }
+
+      return result;
+    } catch (error) {
+      this.running--;
+      this.completedChunks++;
+
+      // En cas d'erreur inattendue, marquer toutes les entrées du chunk comme échouées
+      Object.keys(chunk).forEach((entryName) => {
+        this.failedEntries.push({
+          entryName,
+          error: error.message,
+          chunkIndex,
+        });
+      });
+
+      return {
+        success: false,
+        entries: Object.keys(chunk),
+        chunkIndex,
+        error: error.message,
+      };
+    }
+  }
+
+  compileResults(results) {
+    const failedChunks = results.filter(
+      (r) =>
+        r.status === "rejected" ||
+        (r.status === "fulfilled" && !r.value.success),
+    ).length;
+
+    return {
+      total: this.totalEntries,
+      succeeded: this.succeededEntries,
+      failed: this.failedEntries.length,
+      totalChunks: this.totalChunks,
+      failedChunks,
+      failedEntries: this.failedEntries,
+    };
   }
 }
 
 // ------------------------------------------------------
-// 4. Construction complète
+// 4. Construction complète optimisée
 // ------------------------------------------------------
 async function main() {
-  console.log("🏗️  Construction des entrées…");
+  console.log("🏗️  Construction des entrées en mode optimisé...");
 
-  const entriesArray = Object.entries(allEntries).map(([name, path]) => ({
-    name,
-    path,
-  }));
-
-  const cpuCount = Math.max(1, os.cpus().length - 1); // Laisser un CPU libre
+  const cpuCount = Math.max(1, os.cpus().length - 1);
   const maxConcurrent = Math.min(cpuCount, CONFIG.maxConcurrent);
 
-  console.log(`💻 CPUs disponibles: ${os.cpus().length} (utilisés: ${maxConcurrent})`);
+  console.log(
+    `💻 CPUs disponibles: ${os.cpus().length} (utilisés: ${maxConcurrent})`,
+  );
+  console.log(`🧠 Mémoire max par processus: ${CONFIG.maxMemoryMB}MB`);
 
-  const queue = new QueueManager(entriesArray, maxConcurrent);
+  const queue = new OptimizedQueueManager(
+    allEntries,
+    maxConcurrent,
+    CONFIG.batchSize,
+  );
+
   const startTime = Date.now();
-
   const result = await queue.run();
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
-  console.log("\n" + "=".repeat(50));
-  console.log("📊 RAPPORT FINAL");
-  console.log("=".repeat(50));
+  console.log("\n" + "=".repeat(60));
+  console.log("📊 RAPPORT FINAL - MODE OPTIMISÉ");
+  console.log("=".repeat(60));
   console.log(`⏱️  Durée totale: ${duration}s`);
-  console.log(`✅ Réussies : ${result.succeeded}`);
-  console.log(`❌ Échouées : ${result.failed}`);
+  console.log(`📦 Lots traités: ${result.totalChunks}`);
+  console.log(`✅ Entrées réussies : ${result.succeeded}`);
+  console.log(`❌ Entrées échouées : ${result.failed}`);
   console.log(`📊 Total traité : ${result.total}`);
+  console.log(
+    `🏎️  Performance: ${(result.total / duration).toFixed(2)} entrées/seconde`,
+  );
 
   if (result.failed > 0) {
     console.log("\n📋 Détail des échecs :");
-    result.failedEntries.forEach((fail, idx) => {
-      console.log(`  ${idx + 1}. ${fail.entryName}: ${fail.error?.substring(0, 100)}...`);
+
+    // Grouper par chunk
+    const failedByChunk = {};
+    result.failedEntries.forEach((fail) => {
+      if (!failedByChunk[fail.chunkIndex]) {
+        failedByChunk[fail.chunkIndex] = [];
+      }
+      failedByChunk[fail.chunkIndex].push(fail);
     });
+
+    Object.entries(failedByChunk).forEach(([chunkIndex, fails]) => {
+      console.log(`  Lot ${parseInt(chunkIndex) + 1}:`);
+      fails.forEach((fail, idx) => {
+        console.log(
+          `    ${idx + 1}. ${fail.entryName}: ${fail.error?.substring(0, 100)}...`,
+        );
+      });
+    });
+
+    console.log(
+      "\n💡 Conseil: Essayez de réduire CONFIG.batchSize ou d'augmenter CONFIG.maxMemoryMB",
+    );
     process.exit(1);
   }
 
+  console.log("\n🎉 Toutes les entrées ont été construites avec succès!");
   process.exit(0);
 }
 
 // ------------------------------------------------------
-// 5. buildCustom() pour dev-optimized.js
+// 5. buildCustom() optimisé
 // ------------------------------------------------------
 async function buildCustom(customEntries) {
-  console.log("\n🎯 Build personnalisé pour:", Object.keys(customEntries).join(", "));
+  console.log(
+    "\n🎯 Build personnalisé pour:",
+    Object.keys(customEntries).join(", "),
+  );
 
-  const entries = Object.entries(customEntries).map(([name, path]) => ({
-    name,
-    path,
-  }));
-  const queue = new QueueManager(entries, 2); // Limiter à 2 en parallèle pour les builds custom
+  // Si peu d'entrées, utiliser un seul chunk
+  const batchSize =
+    Object.keys(customEntries).length <= 5
+      ? Object.keys(customEntries).length
+      : 3;
+
+  const queue = new OptimizedQueueManager(customEntries, 1, batchSize);
   const result = await queue.run();
 
   if (result.failed > 0) {
     console.error("❌ Certains builds ont échoué");
     process.exit(1);
   }
-
   console.log("✅ Build personnalisé terminé avec succès");
   process.exit(0);
 }
 
 // ------------------------------------------------------
-// 6. Support CLI
+// 6. Support CLI amélioré
 // ------------------------------------------------------
 if (process.argv.includes("--custom")) {
   const customIndex = process.argv.indexOf("--custom");
@@ -390,7 +563,6 @@ if (process.argv.includes("--custom")) {
     .map((name) => name.trim())
     .filter((name) => name);
   const customEntries = {};
-
   names.forEach((name) => {
     if (allEntries[name]) {
       customEntries[name] = allEntries[name];
@@ -404,6 +576,20 @@ if (process.argv.includes("--custom")) {
     process.exit(1);
   }
   buildCustom(customEntries);
+} else if (process.argv.includes("--help")) {
+  console.log(`
+Usage: node build-independent.js [options]
+
+Options:
+  --custom entry1,entry2  Build seulement les entrées spécifiées
+  --help                  Affiche cette aide
+
+Configuration dans le fichier:
+  batchSize: ${CONFIG.batchSize} (entrées par lot)
+  maxConcurrent: ${CONFIG.maxConcurrent} (processus parallèles)
+  maxMemoryMB: ${CONFIG.maxMemoryMB} (mémoire par processus)
+  `);
+  process.exit(0);
 } else {
   main();
 }
@@ -418,3 +604,4 @@ process.on("SIGTERM", () => {
   console.log("\n\n⚠️  Build terminé par le système");
   process.exit(143);
 });
+
