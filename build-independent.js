@@ -7,8 +7,8 @@ const os = require("os");
 // Configuration
 const CONFIG = {
   maxMemoryMB: 2048,
-  batchSize: 10, // Réduit pour mieux gérer la mémoire
-  maxConcurrent: 3, // Réduit pour limiter la consommation mémoire totale
+  batchSize: 10, // Nombre de fichier generer durant un processus.
+  maxConcurrent: 1, // Nombre de processus "node" en concurrence.
   nodeOptions: `--max-old-space-size=${Math.floor(2048 * 0.8)}`,
 };
 
@@ -73,14 +73,14 @@ function createMultiEntryWebpackConfig(entriesObject) {
               }
             }
           },
-
+          // fichiers SCSS / CSS
           {
             test: /\\.(sa|sc|c)ss$/,
             use: [
               MiniCssExtractPlugin.loader,
               {
                 loader: 'css-loader',
-                options: { importLoaders: 1, url: false }
+                options: { importLoaders: 1, url: false } 
               },
               {
                 loader: 'postcss-loader',
@@ -146,12 +146,12 @@ function createMultiEntryWebpackConfig(entriesObject) {
               chunks: 'all',
               minChunks: 2,
             },
-            styles: {
-              test: /\\.css$/,
-              name: 'styles',
-              chunks: 'all',
-              enforce: true,
-            },
+            // styles: {
+            //   test: /\\.css$/,
+            //   name: 'styles',
+            //   chunks: 'all',
+            //   enforce: true,
+            // },
           },
         },
       },

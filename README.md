@@ -1,4 +1,5 @@
 # WBU Atomique Theme
+Afin d'ameliorer les performances des fichiers styles, il faut decouper les styles par page. Ce paquet permet de generer plusieurs fichiers css en. Elle s'appuie sur les fichiers build-independent.js, dev-optimized.js et auto_generate_entries.json afin de generer ses fichiers css et js. Si vous souhaitez une approche simple, utiisant le webpack.config.js utilisé ce module : <a href="https://github.com/Habeuk/wbu-atomique-base">wbu-atomique-base</a>
 
 ## Installation
 
@@ -31,3 +32,7 @@
    - La clé représente le nom du fichier de sortie (par exemple, `vendor` => `vendor.{js,css}` dans `outDir`).
    - La valeur représente le fichier source à compiler depuis `inDir`.
    - lancer la commande `npm run build` pour compiler ou `npm run Prod` pour watch les modifications des fichiers configuré dans `auto_generate_entries.json`
+2. Lancer un fichier custom :
+   - lancer la commande `npm run build:custom --watch  --custom node__home_page__1`
+
+
